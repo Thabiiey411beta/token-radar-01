@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — every protocol with no token yet</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Token Radar</h1>
+    <p class="sub">Every protocol that records no token, ranked by what its launch would be worth. Snapshot 14 Nov 2026 · Model radar-2 · No network, no live prices — the sealed snapshot is the only data.</p>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-tab="board" class="on">Board</button>
+  <button data-tab="live">Live tokens</button>
+  <button data-tab="model">Model</button>
+</nav>
+<section id="tab-board">
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="Search name or slug…" aria-label="Search">
+    <select id="cat" aria-label="Category"><option value="">All categories</option></select>
+    <select id="chain" aria-label="Chain"><option value="">All chains</option></select>
+    <label><input type="checkbox" id="watchonly"> Watchlist only</label>
+    <label><input type="checkbox" id="farmonly"> Farmable only</label>
+    <select id="sort" aria-label="Sort">
+      <option value="rank">Sort: rank</option>
+      <option value="tvl">Sort: TVL</option>
+      <option value="growth">Sort: 7-day change</option>
+      <option value="implied">Sort: implied value</option>
+    </select>
+  </div>
+  <p class="count" id="count"></p>
+  <div class="tablewrap">
+    <table id="board">
+      <thead><tr>
+        <th data-k="rank">#</th><th data-k="name">Protocol</th><th data-k="category">Category</th>
+        <th data-k="tvl">TVL</th><th data-k="growth">7d</th><th data-k="implied">Implied value</th><th>Farm</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <article id="detail" class="detail" hidden></article>
+</section>
+<section id="tab-live" hidden>
+  <p class="note">These protocols already trade. The board shows the market's own value for them, never a model's — they are set aside here so they never mix into the ranking.</p>
+  <div class="tablewrap"><table id="livetable">
+    <thead><tr><th>Protocol</th><th>Category</th><th>TVL</th><th>Market cap</th><th>7d</th></tr></thead>
+    <tbody id="liverows"></tbody>
+  </table></div>
+</section>
+<section id="tab-model" hidden>
+  <h2>Model radar-2</h2>
+  <p>Implied value follows only from the snapshot's own figures. No protocol name is special-cased; the same function scores every row.</p>
+  <pre class="formula">implied = TVL × 0.30 × growth × maturity × farmability × breadth
+growth     = 1 + clamp(change_7d, −60, +150) / 100 × 0.6
+maturity   = 0.70 + 0.30 × min(age_days, 1095) / 1095   (age unknown: 365 days)
+breadth    = 1 + 0.02 × min(chains − 1, 5)
+ties are broken by $1, so rank 1 is always the most valuable protocol.</pre>
+  <h3>Farmability — why some rows sink</h3>
+  <p>A protocol can record no token and still have no token of its own to launch. Farmability says how much of its TVL could ever become a launch:</p>
+  <table class="plain">
+    <thead><tr><th>What it is</th><th>Factor</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Standard protocol</td><td>1.00</td><td>Nothing in its record says it cannot launch.</td></tr>
+      <tr><td>Risk Curators / Onchain Capital Allocator</td><td>0.85</td><td>Vaults that may issue a token of their own.</td></tr>
+      <tr><td>No category recorded</td><td>0.90</td><td>Scored as a standard protocol.</td></tr>
+      <tr><td>Liquid Staking / Liquid Restaking / Restaked BTC</td><td>0.02</td><td>A staked product of a token that already trades.</td></tr>
+      <tr><td>Bridge / Canonical Bridge</td><td>0.02</td><td>A wrapped or bridged product of a token that already trades.</td></tr>
+      <tr><td>CEX</td><td>0.02</td><td>An exchange holds user funds; it issues no token of its own.</td></tr>
+      <tr><td>Name says wrapped / staked / staking, or begins with an exchange</td><td>capped at 0.10</td><td>A product of a token that already trades.</td></tr>
+      <tr><td>Versioned name (… V2, v2, 2.0)</td><td>× 0.25</td><td>A pool of another protocol, not a launch of its own.</td></tr>
+    </tbody>
+  </table>
+  <h3>Farm plans</h3>
+  <p>Every row carries six steps built from its own record — category, chain, TVL tier and age — each with what it costs and how long it takes: a fresh wallet, the one action to take, one qualifying action a week, a hold of 30–60 days, the points page check, and a farm log. Gas is priced by chain (Ethereum about $8, Solana about $0.05, L2s about $0.50, Bitcoin about $3). A row that cannot be farmed says so plainly and tells you what to watch instead of giving pretend steps.</p>
+  <h3>Reading the board</h3>
+  <p>“Records no token” means the protocol's DefiLlama record carries no token — it is not proof the protocol has none. The watchlist is the floor, never the ceiling: the board ranks all 342 pre-token protocols, and the 40 on the watchlist are marked with a star. Reference date is the snapshot's own <span id="asof"></span>; the same snapshot always gives the same board.</p>
+</section>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
