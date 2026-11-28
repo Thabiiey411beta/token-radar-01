@@ -13,12 +13,12 @@ farm each one.
 ## What it does
 
 `main.ts` (Node 22, standard library only) reads `snapshot.json`, scores all
-342 pre-token protocols with model **radar-2**, writes the ranked board to
+342 pre-token protocols with model **radar-3**, writes the ranked board to
 `/output/board.json`, the dashboard's data to `/output/data.js`, copies
 `dashboard/` and `screenshots/` to `/output`, and writes `/output/dossier.json`
 with the vendored make.fun library.
 
-## The model (radar-2)
+## The model (radar-3)
 
 Implied value follows only from the snapshot's own figures — no protocol name
 is special-cased:
@@ -38,13 +38,27 @@ standard protocol scores 1.00 — so the board's top is the protocols that
 could actually launch, not the exchanges that never will. Ties are broken by
 $1 so the board is strictly ranked.
 
+## Validation (radar-3)
+
+The model's constants are not asserted, they are checked against the snapshot
+itself, and the checks run on every build (`lib/validation.ts`): leave-one-out
+stability (rebuild the board 40 times, once per watchlist protocol removed,
+and watch the top 20), a walk-forward check (fit the base multiple and growth
+weight on protocols listed before the median listing date, score them on the
+later-listed half), Brier scores for the model's implied probability against
+top-quartile 7-day TVL growth (overall and per category), and a tested-but-not-
+kept table of the variants tried. Every farm plan is costed from its own
+prices — capital plus gas across the hold — and the top 10's total is on the
+Validation tab.
+
 ## The dashboard
 
 A static page, no network: a sortable, filterable board of all 342 pre-token
 protocols (watchlist starred), a detail view per protocol with the value
-breakdown and its six farm steps, a live-tokens tab that sets the traded
-protocols aside with the market's own values, and a model tab stating the
-formula in full. Run it locally with:
+breakdown, its six farm steps and its farm cost, a live-tokens tab that sets
+the traded protocols aside with the market's own values, a model tab stating
+the formula in full, and a Validation tab showing the checks above. Run it
+locally with:
 
 ```sh
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json

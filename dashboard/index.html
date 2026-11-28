@@ -10,7 +10,7 @@
 <header class="top">
   <div>
     <h1>Token Radar</h1>
-    <p class="sub">Every protocol that records no token, ranked by what its launch would be worth. Snapshot 14 Nov 2026 · Model radar-2 · No network, no live prices — the sealed snapshot is the only data.</p>
+    <p class="sub">Every protocol that records no token, ranked by what its launch would be worth. Snapshot 14 Nov 2026 · Model radar-3 · No network, no live prices — the sealed snapshot is the only data.</p>
   </div>
   <div class="stats" id="stats"></div>
 </header>
@@ -18,6 +18,7 @@
   <button data-tab="board" class="on">Board</button>
   <button data-tab="live">Live tokens</button>
   <button data-tab="model">Model</button>
+  <button data-tab="validation">Validation</button>
 </nav>
 <section id="tab-board">
   <div class="toolbar">
@@ -33,6 +34,7 @@
       <option value="implied">Sort: implied value</option>
     </select>
   </div>
+  <article id="detail" class="detail" hidden></article>
   <p class="count" id="count"></p>
   <div class="tablewrap">
     <table id="board">
@@ -43,7 +45,6 @@
       <tbody id="rows"></tbody>
     </table>
   </div>
-  <article id="detail" class="detail" hidden></article>
 </section>
 <section id="tab-live" hidden>
   <p class="note">These protocols already trade. The board shows the market's own value for them, never a model's — they are set aside here so they never mix into the ranking.</p>
@@ -52,13 +53,18 @@
     <tbody id="liverows"></tbody>
   </table></div>
 </section>
+<section id="tab-validation" hidden>
+  <h2>Validation — does radar-3 survive its own checks?</h2>
+  <div id="validation"></div>
+</section>
 <section id="tab-model" hidden>
-  <h2>Model radar-2</h2>
+  <h2>Model radar-3</h2>
   <p>Implied value follows only from the snapshot's own figures. No protocol name is special-cased; the same function scores every row.</p>
   <pre class="formula">implied = TVL × 0.30 × growth × maturity × farmability × breadth
 growth     = 1 + clamp(change_7d, −60, +150) / 100 × 0.6
 maturity   = 0.70 + 0.30 × min(age_days, 1095) / 1095   (age unknown: 365 days)
 breadth    = 1 + 0.02 × min(chains − 1, 5)
+farm floor = 0.02 for a row that cannot launch a token of its own
 ties are broken by $1, so rank 1 is always the most valuable protocol.</pre>
   <h3>Farmability — why some rows sink</h3>
   <p>A protocol can record no token and still have no token of its own to launch. Farmability says how much of its TVL could ever become a launch:</p>

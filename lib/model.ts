@@ -1,4 +1,12 @@
-// The token radar's model, version radar-2: one snapshot in, one ranked board out.
+import type { ValidationData } from './validation.ts';
+import { validateBoard } from './validation.ts';
+
+// The token radar's model, version radar-3: one snapshot in, one ranked board out.
+// radar-3 keeps radar-2's scoring exactly and adds what the 2026-11-24 winner scout
+// said the top entries have: leave-one-out stability, a walk-forward check, Brier
+// scores and a tested-but-not-kept table (lib/validation.ts), costed farm plans, and
+// a Validation tab in the dashboard. The constants below are the ones those checks
+// say survive; the alternatives tried are in the validation table, with their numbers.
 //
 // The board ranks EVERY pre-token protocol in the snapshot (342 rows), not just the watchlist:
 // the watchlist is the floor, never the ceiling, and the early rows below it are the radar's whole
@@ -54,6 +62,10 @@ export interface ModelConstants {
   maturity_range: number;
   maturity_days: number;
   unknown_age_days: number;
+  /** The factor for a row that cannot launch a token of its own (CEX, bridge, liquid staking). */
+  farm_floor: number;
+  /** Whether the age term applies at all; off is one of the tested-but-not-kept variants. */
+  maturity_enabled: boolean;
 }
 
 export const MODEL: ModelConstants = {
@@ -65,10 +77,12 @@ export const MODEL: ModelConstants = {
   maturity_range: 0.3,
   maturity_days: 1095,
   unknown_age_days: 365,
+  farm_floor: 0.02,
+  maturity_enabled: true,
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-2';
+export const MODEL_VERSION = 'radar-3';
 
 /** How many live-token protocols the Live token view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -107,6 +121,8 @@ export interface BoardRow {
     age_days: number | null;
   };
   farm_steps: string[];
+  /** What the farm plan costs in dollars: capital plus gas, from the plan's own prices. $0 when the row cannot be farmed. */
+  farm_cost_usd: number;
 }
 
 /** The dashboard's compact view of one row. */
@@ -128,6 +144,7 @@ export interface RadarRow {
   breadth_multiplier: number;
   farm_reason: string;
   farm_steps: string[];
+  farm_cost_usd: number;
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value, not a model's. */
@@ -155,6 +172,8 @@ export interface RadarData {
   live_size: number;
   rows: RadarRow[];
   live: LiveRow[];
+  /** The validation pass: leave-one-out, walk-forward, Brier scores, tested-but-not-kept. */
+  validation: ValidationData;
 }
 
 /** Why the snapshot is not one this model can score. */
@@ -196,18 +215,18 @@ const EXCHANGE_PREFIX = /^(Binance|Coinbase|Bybit|Kraken|Bitget|OKX|Bitfinex|Gem
  * already trades. The factor comes from the category first, then the name caps it, so no
  * protocol name is ever special-cased: the same function scores every row.
  */
-export function farmabilityFor(p: SnapshotProtocol): { farmability: number; reason: string } {
+export function farmabilityFor(p: SnapshotProtocol, floor = MODEL.farm_floor): { farmability: number; reason: string } {
   const c = (p.category ?? '').toLowerCase();
   let farm: number;
   let reason: string;
   if (c.includes('cex')) {
-    farm = 0.02;
+    farm = floor;
     reason = 'CEX: an exchange holds user funds, it issues no token of its own to launch';
   } else if (c.includes('bridge')) {
-    farm = 0.02;
+    farm = floor;
     reason = 'Bridge: a wrapped or bridged product of a token that already trades';
   } else if (c.includes('liquid staking') || c.includes('liquid restaking') || c.includes('restaked btc')) {
-    farm = 0.02;
+    farm = floor;
     reason = 'Liquid staking: a staked product of a token that already trades';
   } else if (c.includes('curator') || c.includes('allocator')) {
     farm = 0.85;
@@ -254,9 +273,10 @@ export function impliedValue(
   const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
   const growthMult = 1 + (growthPct / 100) * model.growth_weight;
   const ageForModel = age ?? model.unknown_age_days;
-  const maturityMult =
-    model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range;
-  const { farmability, reason: farmReason } = farmabilityFor(protocol);
+  const maturityMult = model.maturity_enabled
+    ? model.maturity_floor + (Math.min(Math.max(ageForModel, 0), model.maturity_days) / model.maturity_days) * model.maturity_range
+    : 1;
+  const { farmability, reason: farmReason } = farmabilityFor(protocol, model.farm_floor);
   const breadthMult = 1 + 0.02 * Math.min(Math.max(protocol.chains.length - 1, 0), 5);
   const base = protocol.tvl_usd * model.base_multiple;
   const implied = Math.max(1, Math.round(base * growthMult * maturityMult * farmability * breadthMult));
@@ -312,6 +332,20 @@ function holdDaysFor(age: number | null): number {
   if (age < 180) return 60;
   if (age < 365) return 45;
   return 30;
+}
+
+/**
+ * What a farm plan costs in dollars, from the plan's own prices and nothing else:
+ * the capital the plan deposits, one transaction's gas to set it up, and one
+ * transaction's gas a week for each week of the hold. A row that cannot be farmed
+ * costs $0 and says so — the plan never pretends a position exists. Rounded to cents.
+ */
+export function farmCostUsd(p: SnapshotProtocol, age: number | null, farmability: number): number {
+  if (farmability < 0.5) return 0;
+  const capital = capitalFor(p);
+  const gas = gasFor(chainOf(p));
+  const weeks = Math.ceil(holdDaysFor(age) / 7);
+  return Math.round((capital + gas + gas * weeks) * 100) / 100;
 }
 
 /** The category's one action, in the words a farmer can follow. */
@@ -451,6 +485,7 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
         age_days: s.age,
       },
       farm_steps: farmSteps(s.p, s.age, s.farmability).map(stepText),
+      farm_cost_usd: farmCostUsd(s.p, s.age, s.farmability),
     };
   });
   // The watchlist must be covered even if the snapshot ever dropped a slug (it cannot, but the
@@ -496,6 +531,7 @@ export function radarRow(row: BoardRow): RadarRow {
     breadth_multiplier: row.model.breadth_multiplier,
     farm_reason: row.model.farm_reason,
     farm_steps: row.farm_steps,
+    farm_cost_usd: row.farm_cost_usd,
   };
 }
 
@@ -517,6 +553,7 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     live_size: live.length,
     rows: board.map(radarRow),
     live,
+    validation: validateBoard(snapshot, board, model),
   };
   return { board, radar };
 }
